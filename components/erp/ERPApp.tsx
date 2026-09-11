@@ -867,6 +867,7 @@ onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = ii)}
         <aside
           style={{
             display: isMobile ? "none" : "flex",
+            flexDirection: "column",
             width: navOpen ? "auto" : 64,
             flexShrink: 0,
             backgroundColor: Ib,
