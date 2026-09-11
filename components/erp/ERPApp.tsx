@@ -63,6 +63,7 @@ type ModalState =
   | { type: "statement"; kind: "customer" | "supplier"; id: string }
   | { type: "payment"; kind: "customer" | "supplier"; id: string }
   | { type: "manual-move" }
+  | { type: "move-form"; id?: string }
   | { type: "region-form"; id?: string };
 
 const nav = ALL_PAGES.filter((p) => p.key !== "users");
@@ -1356,17 +1357,18 @@ onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = ii)}
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
               <table className="w-full text-sm">
-                {tblHead(["التاريخ", "النوع", "البيان", "المبلغ"])}
+                {tblHead(["التاريخ", "النوع", "البيان", "المبلغ", ""])}
                 <tbody>
                   {fltMoves.length === 0 ? (
                     <tr>
-                      <td colSpan={4}>
+                      <td colSpan={5}>
                         <EmptyState icon="wallet" title="لا توجد حركات خزينة بعد" />
                       </td>
                     </tr>
                   ) : (
                     fltMoves.map((m) => {
                       const isIn = m.sign >= 0;
+                      const locked = m.type === "sale" || m.type === "purchase";
                       return (
                         <tr key={m.id} className="border-t border-gray-50 hover:bg-gray-50/50">
                           <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{fmtDate(m.date)}</td>
@@ -1378,6 +1380,34 @@ onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = ii)}
                           </td>
                           <td className="px-3 py-3 font-bold whitespace-nowrap" style={{ color: isIn ? ui : ii }}>
                             {isIn ? "+" : "-"} {fmt(m.amount)}
+                          </td>
+                          <td className="px-3 py-3">
+                            {!locked && (
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => setModal({ type: "move-form", id: m.id })}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                                  title="تعديل"
+                                >
+                                  <Icon name="pencil" size={15} />
+                                </button>
+                                <button
+                                  onClick={() => setConfirm({
+                                    message: `هل تريد حذف هذه الحركة (${isIn ? "وارد" : "منصرف"} ${fmt(m.amount)})؟`,
+                                    action: async () => {
+                                      const r = await api("DELETE", "movements", undefined, { id: m.id });
+                                      if (r.ok) showToast("تم حذف الحركة");
+                                      else showToast(r.data?.error || "تعذر الحذف", true);
+                                      await load();
+                                    },
+                                  })}
+                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                                  title="حذف"
+                                >
+                                  <Icon name="trash2" size={15} />
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1659,6 +1689,23 @@ onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = ii)}
           }}
         />
       )}
+      {modal && modal.type === "move-form" && (() => {
+        const mv = db.movements.find((x) => x.id === modal.id) || null;
+        return (
+          <ManualMoveForm
+            initial={mv ? { id: mv.id, dir: mv.sign >= 0 ? "in" : "out", amount: mv.amount, category: mv.category, note: mv.note, date: mv.date } : null}
+            onClose={() => setModal(null)}
+            onSave={async ({ dir, amount, category, note, date }) => {
+              if (!mv) return;
+              const r = await api("PUT", "movements", { dir, amount, category, note, date }, { id: mv.id });
+              if (r.ok) showToast("تم تعديل الحركة");
+              else showToast(r.data?.error || "تعذر التعديل", true);
+              setModal(null);
+              await load();
+            }}
+          />
+        );
+      })()}
       {modal && modal.type === "region-form" && (
         <RegionForm
           initial={db.regions.find((r) => r.id === modal.id) || null}

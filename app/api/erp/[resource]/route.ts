@@ -5,7 +5,7 @@ import { getSession, bearerToken } from "@/lib/auth";
 import { canAccess } from "@/lib/roles";
 import {
   createSale, deleteSale, createPurchase, deletePurchase,
-  collect, settle, manualMove, getCompany, saveCompany,
+  collect, settle, manualMove, updateMove, deleteMove, getCompany, saveCompany,
   partyStatement, dashboard, seedRegions,
 } from "@/lib/erp";
 
@@ -162,6 +162,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ reso
   if (!(await allows(user, RES_PAGE[resource])))
     return NextResponse.json({ error: "غير مخوّل لهذه الصفحة" }, { status: 403 });
 
+  if (resource === "movements") {
+    await updateMove(id, p);
+    return NextResponse.json({ ok: true });
+  }
+
   const fields = ["items", "customers", "suppliers", "regions"];
   if (!fields.includes(resource)) return NextResponse.json({ error: "غير معروف" }, { status: 404 });
 
@@ -187,6 +192,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ r
 
   if (resource === "sales") { await deleteSale(id); return NextResponse.json({ ok: true }); }
   if (resource === "purchases") { await deletePurchase(id); return NextResponse.json({ ok: true }); }
+  if (resource === "movements") { await deleteMove(id); return NextResponse.json({ ok: true }); }
 
   if (resource === "items") {
     const inSale = await d.collection("saleInvoices").findOne({ "rows.itemId": new ObjectId(id) });

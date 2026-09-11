@@ -879,21 +879,23 @@ export function PaymentDialog({
 }
 
 export function ManualMoveForm({
+  initial,
   onSave,
   onClose,
 }: {
+  initial?: { id: string; dir: "in" | "out"; amount: number; category: string; note: string; date: string } | null;
   onSave: (m: { dir: "in" | "out"; amount: number; category: string; note: string; date: string }) => void;
   onClose: () => void;
 }) {
-  const [dir, setDir] = useState<"in" | "out">("in");
-  const [category, setCategory] = useState("");
-  const [note, setNote] = useState("");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(today());
+  const [dir, setDir] = useState<"in" | "out">(initial?.dir || "in");
+  const [category, setCategory] = useState(initial?.category || "");
+  const [note, setNote] = useState(initial?.note || "");
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
+  const [date, setDate] = useState(initial?.date || today());
   const a = Number(amount);
   const ok = !isNaN(a) && a > 0;
   return (
-    <Modal title="حركة خزينة يدوية" onClose={onClose}>
+    <Modal title={initial ? "تعديل حركة خزينة" : "حركة خزينة يدوية"} onClose={onClose}>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2">
           {(

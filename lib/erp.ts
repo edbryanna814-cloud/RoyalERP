@@ -214,6 +214,49 @@ export async function manualMove(p: any) {
   });
 }
 
+export async function updateMove(id: string, p: any) {
+  const col = await c("movements");
+  const mv = await col.findOne({ _id: oid(id) });
+  if (!mv) throw new Error("الحركة غير موجودة");
+  if (mv.type === "sale" || mv.type === "purchase")
+    throw new Error("لا يمكن تعديل حركة مرتبطة بفاتورة");
+  const amount = parseFloat(p.amount);
+  const newAmt = amount > 0 ? amount : mv.amount;
+  const sign = mv.type === "collect" || mv.type === "settle" ? mv.sign : p.dir ? (p.dir === "out" ? -1 : 1) : mv.sign;
+
+  if ((mv.type === "collect" || mv.type === "settle") && newAmt !== mv.amount) {
+    const delta = newAmt - mv.amount;
+    const colName = mv.type === "collect" ? "creditBalance" : "payableBalance";
+    const partyCol = await c(mv.type === "collect" ? "customers" : "suppliers");
+    const party = await partyCol.findOne({ _id: mv.partyId });
+    if (party) await partyCol.updateOne({ _id: party._id }, { $inc: { [colName]: -delta } });
+  }
+
+  await col.updateOne({ _id: mv._id }, {
+    $set: {
+      amount: newAmt, sign,
+      category: p.category ?? mv.category,
+      note: p.note ?? mv.note,
+      date: p.date ?? mv.date,
+    },
+  });
+}
+
+export async function deleteMove(id: string) {
+  const col = await c("movements");
+  const mv = await col.findOne({ _id: oid(id) });
+  if (!mv) throw new Error("الحركة غير موجودة");
+  if (mv.type === "sale" || mv.type === "purchase")
+    throw new Error("لا يمكن حذف حركة مرتبطة بفاتورة");
+  if (mv.type === "collect" || mv.type === "settle") {
+    const colName = mv.type === "collect" ? "creditBalance" : "payableBalance";
+    const partyCol = await c(mv.type === "collect" ? "customers" : "suppliers");
+    const party = await partyCol.findOne({ _id: mv.partyId });
+    if (party) await partyCol.updateOne({ _id: party._id }, { $inc: { [colName]: mv.amount } });
+  }
+  await col.deleteOne({ _id: mv._id });
+}
+
 // ---------- company / statement / dashboard ----------
 
 export async function seedRegions() {
