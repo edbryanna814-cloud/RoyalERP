@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Royal Price Offers (رويال للتوريدات العمومية)
 
-## Getting Started
+Next.js 16 + MongoDB app لإدارة عروض الأسعار: إنشاء عرض، حفظه، وتصديره إلى Excel.
 
-First, run the development server:
+## التشغيل
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # ثم املأ القيم
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` مطلوب فيه:
+- `MONGODB_URI` — رابط MongoDB Atlas (cluster + user/password)
+- `JWT_SECRET` — سرّ طويل عشوائي
+- `APP_URL` — يظهر في رابط إعادة تعيين كلمة المرور المطبوع في السجل
+- `MONGODB_DB` (اختياري) — اسم قاعدة البيانات، الافتراضي `royal_quotes`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## الاستعادة / نسيت كلمة المرور
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+المشروع بيطبع رابط إعادة التعيين في **سجل الخادم** (console) لأن مفيش خدمة إيميل.
+الـ App ينشئ تلقائياً مستخدمين، الـ collections (`users`, `sessions`, `offers`) بتتعمل أول ما يستخدمها.
 
-## Learn More
+## المسارات
 
-To learn more about Next.js, take a look at the following resources:
+- `/login` `/register` `/forgot` `/reset/[token]` — المصادقة
+- `/` — إنشاء عرض سعر (يحميها تسجيل الدخول)
+- `/offers` — العروض المحفوظة + تصدير Excel
+- `/api/export` — تنزيل كل البيانات كملف Excel (عرض واحد: `?id=`)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## فحص سريع
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run build
+node scripts/check.mjs
+```

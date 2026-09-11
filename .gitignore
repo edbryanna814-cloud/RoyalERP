@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# deploy bundle
+royal-quotes-host.zip
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
