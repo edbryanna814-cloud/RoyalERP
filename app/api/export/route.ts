@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const id = req.nextUrl.searchParams.get("id");
   const d = await db();
-  const query = { userId: user.id } as any;
+  const query: any = {};
   if (id) query._id = new ObjectId(id);
 
   const offers = await d

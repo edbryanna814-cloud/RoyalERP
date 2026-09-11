@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const d = await db();
   const items = await d
     .collection("offers")
-    .find({ userId: user.id })
+    .find({})
     .sort({ savedAt: -1 })
     .toArray();
   const offers = items.map((o) => ({ id: String(o._id), ...o, _id: undefined }));
@@ -27,7 +27,6 @@ export async function POST(req: NextRequest) {
   const data = await req.json();
   const d = await db();
   const res = await d.collection("offers").insertOne({
-    userId: user.id,
     meta: data.meta || {},
     customer: data.customer || {},
     rows: data.rows || [],
@@ -47,7 +46,7 @@ export async function DELETE(req: NextRequest) {
   const d = await db();
   await d
     .collection("offers")
-    .deleteOne({ _id: new ObjectId(id), userId: user.id });
+    .deleteOne({ _id: new ObjectId(id) });
   return NextResponse.json({ ok: true });
 }
 

@@ -14,18 +14,18 @@ export async function GET(req: NextRequest) {
 
   const d = await db();
   const scoop = async (coll: string) =>
-    d.collection(coll).find({ userId: user.id }).sort({ createdAt: 1 }).toArray();
+    d.collection(coll).find({}).sort({ createdAt: 1 }).toArray();
 
   const [customers, suppliers, items, regions, offers, sales, purchases, movements, company] = await Promise.all([
     scoop("customers"),
     scoop("suppliers"),
     scoop("items"),
     scoop("regions"),
-    d.collection("offers").find({ userId: user.id }).sort({ savedAt: 1 }).toArray(),
-    d.collection("saleInvoices").find({ userId: user.id }).sort({ createdAt: 1 }).toArray(),
-    d.collection("purchaseInvoices").find({ userId: user.id }).sort({ createdAt: 1 }).toArray(),
-    d.collection("movements").find({ userId: user.id }).sort({ createdAt: 1 }).toArray(),
-    (await d.collection("company").findOne({ userId: user.id })) || {},
+    d.collection("offers").find({}).sort({ savedAt: 1 }).toArray(),
+    d.collection("saleInvoices").find({}).sort({ createdAt: 1 }).toArray(),
+    d.collection("purchaseInvoices").find({}).sort({ createdAt: 1 }).toArray(),
+    d.collection("movements").find({}).sort({ createdAt: 1 }).toArray(),
+    (await d.collection("company").findOne({})) || {},
   ]) as any[];
 
   const companyRows = [{

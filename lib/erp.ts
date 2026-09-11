@@ -14,10 +14,16 @@ function oid(s: string) {
   return new ObjectId(s);
 }
 
-async function nextSeq(userId: string, type: string) {
-  const d = await c("counters");
-  const r = await d.findOneAndUpdate(
-    { userId, type },
+async function nextSeq(type: string) {
+  const col = await c("counters");
+  const all = await col.find({ type }).toArray();
+  const maxSeq = all.reduce((m, d) => Math.max(m, (d as any).seq || 0), 0);
+  if (all.length !== 1) {
+    await col.deleteMany({ type });
+    await col.insertOne({ type, seq: maxSeq });
+  }
+  const r = await col.findOneAndUpdate(
+    { type },
     { $inc: { seq: 1 } },
     { upsert: true, returnDocument: "after" }
   );
@@ -33,14 +39,14 @@ export function fmtMoney(n: number) {
 
 // ---------- sales ----------
 
-export async function createSale(userId: string, p: any) {
+export async function createSale(p: any) {
   const d = await c("customers");
-  const customer = await d.findOne({ _id: oid(p.customerId), userId });
+  const customer = await d.findOne({ _id: oid(p.customerId) });
   if (!customer) throw new Error("العميل غير موجود");
 
   const rows: any[] = [];
   for (const r of p.rows) {
-    const item = await (await c("items")).findOne({ _id: oid(r.itemId), userId });
+    const item = await (await c("items")).findOne({ _id: oid(r.itemId) });
     if (!item) throw new Error("صنف غير موجود");
     const qty = parseFloat(r.qty ?? 0);
     const price = parseFloat(r.price ?? 0);
@@ -51,9 +57,8 @@ export async function createSale(userId: string, p: any) {
   }
 
   const t = invoiceTotals(rows, !!p.vat, parseFloat(p.paid ?? 0));
-  const seq = await nextSeq(userId, "sale");
+  const seq = await nextSeq("sale");
   const invoice = {
-    userId,
     number: String(seq).padStart(5, "0"),
     date: p.date || new Date().toISOString().slice(0, 10),
     customerId: oid(p.customerId),
@@ -71,7 +76,7 @@ export async function createSale(userId: string, p: any) {
     await (await c("items")).updateOne({ _id: r.itemId }, { $inc: { qty: -r.qty } });
   if (t.paid > 0)
     await (await c("movements")).insertOne({
-      userId, type: "sale", sign: 1, amount: t.paid,
+      type: "sale", sign: 1, amount: t.paid,
       category: t.remaining > 0 ? "مبيعات - دفعة مقدمة" : "مبيعات - نقدي",
       ref: String(inv.insertedId), date: invoice.date, createdAt: new Date(),
     });
@@ -81,9 +86,9 @@ export async function createSale(userId: string, p: any) {
   return { id: String(inv.insertedId), number: invoice.number, total: t.total, remaining: t.remaining };
 }
 
-export async function deleteSale(userId: string, invoiceId: string) {
+export async function deleteSale(invoiceId: string) {
   const col = await c("saleInvoices");
-  const inv = await col.findOne({ _id: oid(invoiceId), userId });
+  const inv = await col.findOne({ _id: oid(invoiceId) });
   if (!inv) throw new Error("الفاتورة غير موجودة");
   for (const r of inv.rows)
     await (await c("items")).updateOne({ _id: r.itemId }, { $inc: { qty: r.qty } });
@@ -92,14 +97,14 @@ export async function deleteSale(userId: string, invoiceId: string) {
       { _id: inv.customerId },
       { $inc: { creditBalance: -inv.remaining } }
     );
-  await (await c("movements")).deleteMany({ userId, ref: String(inv._id) });
+  await (await c("movements")).deleteMany({ ref: String(inv._id) });
   await col.deleteOne({ _id: inv._id });
 }
 
 // ---------- purchases ----------
 
-export async function createPurchase(userId: string, p: any) {
-  const supplier = await (await c("suppliers")).findOne({ _id: oid(p.supplierId), userId });
+export async function createPurchase(p: any) {
+  const supplier = await (await c("suppliers")).findOne({ _id: oid(p.supplierId) });
   if (!supplier) throw new Error("المورد غير موجود");
 
   const rows: any[] = [];
@@ -109,7 +114,7 @@ export async function createPurchase(userId: string, p: any) {
     if (!(qty > 0)) throw new Error("الكمية يجب أن تكون أكبر من صفر");
     let itemId: ObjectId | null = null;
     if (r.itemId) {
-      const item = await (await c("items")).findOne({ _id: oid(r.itemId), userId });
+      const item = await (await c("items")).findOne({ _id: oid(r.itemId) });
       if (item) {
         itemId = item._id;
         rows.push({ itemId, name: item.name, unit: item.unit, qty, price });
@@ -122,9 +127,8 @@ export async function createPurchase(userId: string, p: any) {
   }
 
   const t = invoiceTotals(rows, !!p.vat, parseFloat(p.paid ?? 0));
-  const seq = await nextSeq(userId, "purchase");
+  const seq = await nextSeq("purchase");
   const invoice = {
-    userId,
     number: String(seq).padStart(5, "0"),
     date: p.date || new Date().toISOString().slice(0, 10),
     supplierId: oid(p.supplierId),
@@ -142,7 +146,7 @@ export async function createPurchase(userId: string, p: any) {
       await (await c("items")).updateOne({ _id: r.itemId }, { $inc: { qty: r.qty } });
   if (t.paid > 0)
     await (await c("movements")).insertOne({
-      userId, type: "purchase", sign: -1, amount: t.paid,
+      type: "purchase", sign: -1, amount: t.paid,
       category: t.remaining > 0 ? "مشتريات - دفعة مقدمة" : "مشتريات - نقدي",
       ref: String(inv.insertedId), date: invoice.date, createdAt: new Date(),
     });
@@ -152,57 +156,58 @@ export async function createPurchase(userId: string, p: any) {
   return { id: String(inv.insertedId), number: invoice.number, total: t.total, remaining: t.remaining };
 }
 
-export async function deletePurchase(userId: string, invoiceId: string) {
+export async function deletePurchase(invoiceId: string) {
   const col = await c("purchaseInvoices");
-  const inv = await col.findOne({ _id: oid(invoiceId), userId });
+  const inv = await col.findOne({ _id: oid(invoiceId) });
   if (!inv) throw new Error("الفاتورة غير موجودة");
   for (const r of inv.rows)
-    await (await c("items")).updateOne({ _id: r.itemId }, { $inc: { qty: -r.qty } });
+    if (r.itemId)
+      await (await c("items")).updateOne({ _id: r.itemId }, { $inc: { qty: -r.qty } });
   if (inv.remaining > 0)
     await (await c("suppliers")).updateOne(
       { _id: inv.supplierId },
       { $inc: { payableBalance: -inv.remaining } }
     );
-  await (await c("movements")).deleteMany({ userId, ref: String(inv._id) });
+  await (await c("movements")).deleteMany({ ref: String(inv._id) });
   await col.deleteOne({ _id: inv._id });
 }
 
 // ---------- payments / treasury ----------
 
-export async function collect(userId: string, p: any) {
+export async function collect(p: any) {
   const amount = parseFloat(p.amount);
   if (!(amount > 0)) throw new Error("أدخل مبلغًا صحيحًا");
-  const cust = await (await c("customers")).findOne({ _id: oid(p.partyId), userId });
+  const cust = await (await c("customers")).findOne({ _id: oid(p.partyId) });
   if (!cust) throw new Error("العميل غير موجود");
   await (await c("customers")).updateOne({ _id: cust._id }, { $inc: { creditBalance: -amount } });
   await (await c("movements")).insertOne({
-    userId, type: "collect", sign: 1, amount,
+    type: "collect", sign: 1, amount,
     category: `تحصيل من ${cust.name}`,
     partyId: oid(p.partyId), note: p.note || "", date: p.date || new Date().toISOString().slice(0, 10),
     createdAt: new Date(),
   });
 }
 
-export async function settle(userId: string, p: any) {
+export async function settle(p: any) {
   const amount = parseFloat(p.amount);
   if (!(amount > 0)) throw new Error("أدخل مبلغًا صحيحًا");
-  const sup = await (await c("suppliers")).findOne({ _id: oid(p.partyId), userId });
+  const sup = await (await c("suppliers")).findOne({ _id: oid(p.partyId) });
   if (!sup) throw new Error("المورد غير موجود");
   await (await c("suppliers")).updateOne({ _id: sup._id }, { $inc: { payableBalance: -amount } });
   await (await c("movements")).insertOne({
-    userId, type: "settle", sign: -1, amount,
+    type: "settle", sign: -1, amount,
     category: `سداد إلى ${sup.name}`,
     partyId: oid(p.partyId), note: p.note || "", date: p.date || new Date().toISOString().slice(0, 10),
     createdAt: new Date(),
   });
 }
 
-export async function manualMove(userId: string, p: any) {
+export async function manualMove(p: any) {
   const amount = parseFloat(p.amount);
   const dir = p.dir === "out" ? -1 : 1;
   if (!(amount > 0)) throw new Error("أدخل مبلغًا صحيحًا");
   await (await c("movements")).insertOne({
-    userId, type: "manual", sign: dir, amount,
+    type: "manual", sign: dir, amount,
     category: p.category || "مصروفات أخرى",
     note: p.note || "", date: p.date || new Date().toISOString().slice(0, 10),
     createdAt: new Date(),
@@ -211,36 +216,36 @@ export async function manualMove(userId: string, p: any) {
 
 // ---------- company / statement / dashboard ----------
 
-export async function seedRegions(userId: string) {
+export async function seedRegions() {
   const col = await c("regions");
-  if ((await col.countDocuments({ userId })) === 0) {
-    await col.insertMany(REGION_DEFAULTS.map((name) => ({ userId, name, createdAt: new Date() })));
+  if ((await col.countDocuments()) === 0) {
+    await col.insertMany(REGION_DEFAULTS.map((name) => ({ name, createdAt: new Date() })));
   }
 }
 
-export async function getCompany(userId: string) {
-  return (await (await c("company")).findOne({ userId })) || null;
+export async function getCompany() {
+  return (await (await c("company")).findOne({})) || null;
 }
 
-export async function saveCompany(userId: string, p: any) {
+export async function saveCompany(p: any) {
   await (await c("company")).updateOne(
-    { userId },
-    { $set: { ...p, userId } },
+    {},
+    { $set: { ...p } },
     { upsert: true }
   );
 }
 
-export async function partyStatement(userId: string, kind: "customer" | "supplier", id: string) {
+export async function partyStatement(kind: "customer" | "supplier", id: string) {
   const partyId = oid(id);
   const movements = await (await c("movements"))
-    .find({ userId, partyId })
+    .find({ partyId })
     .sort({ date: 1, createdAt: 1 })
     .toArray();
   const rows: any[] = [];
 
   if (kind === "customer") {
     const sales = await (await c("saleInvoices"))
-      .find({ userId, customerId: partyId })
+      .find({ customerId: partyId })
       .sort({ date: 1, createdAt: 1 })
       .toArray();
     for (const s of sales) {
@@ -250,7 +255,7 @@ export async function partyStatement(userId: string, kind: "customer" | "supplie
     }
   } else {
     const buys = await (await c("purchaseInvoices"))
-      .find({ userId, supplierId: partyId })
+      .find({ supplierId: partyId })
       .sort({ date: 1, createdAt: 1 })
       .toArray();
     for (const b of buys) {
@@ -276,15 +281,15 @@ export async function partyStatement(userId: string, kind: "customer" | "supplie
   return { kind, rows, balance: Math.round(balance * 100) / 100, partyId: id };
 }
 
-export async function dashboard(userId: string) {
+export async function dashboard() {
   const d = await db();
   const [sales, purchases, moves, items, customers, suppliers] = [
-    await d.collection("saleInvoices").find({ userId }).toArray(),
-    await d.collection("purchaseInvoices").find({ userId }).toArray(),
-    await d.collection("movements").find({ userId }).toArray(),
-    await d.collection("items").find({ userId }).toArray(),
-    await d.collection("customers").find({ userId }).toArray(),
-    await d.collection("suppliers").find({ userId }).toArray(),
+    await d.collection("saleInvoices").find({}).toArray(),
+    await d.collection("purchaseInvoices").find({}).toArray(),
+    await d.collection("movements").find({}).toArray(),
+    await d.collection("items").find({}).toArray(),
+    await d.collection("customers").find({}).toArray(),
+    await d.collection("suppliers").find({}).toArray(),
   ];
   const sum = (arr: any[], k: string) => Math.round(arr.reduce((s, x) => s + (x[k] || 0), 0) * 100) / 100;
   const treasury = Math.round(moves.reduce((s, m) => s + (m.sign || 1) * m.amount, 0) * 100) / 100;

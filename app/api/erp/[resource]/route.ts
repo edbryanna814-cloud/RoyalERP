@@ -53,28 +53,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ reso
 
   switch (resource) {
     case "dashboard":
-      return NextResponse.json(await dashboard(user.id));
+      return NextResponse.json(await dashboard());
     case "items":
-      return NextResponse.json(await asList(await d.collection("items").find({ userId: user.id }).sort({ name: 1 }).toArray()));
+      return NextResponse.json(await asList(await d.collection("items").find({}).sort({ name: 1 }).toArray()));
     case "customers":
-      return NextResponse.json(await asList(await d.collection("customers").find({ userId: user.id }).sort({ name: 1 }).toArray()));
+      return NextResponse.json(await asList(await d.collection("customers").find({}).sort({ name: 1 }).toArray()));
     case "suppliers":
-      return NextResponse.json(await asList(await d.collection("suppliers").find({ userId: user.id }).sort({ name: 1 }).toArray()));
+      return NextResponse.json(await asList(await d.collection("suppliers").find({}).sort({ name: 1 }).toArray()));
     case "regions":
-      await seedRegions(user.id);
-      return NextResponse.json(await asList(await d.collection("regions").find({ userId: user.id }).sort({ name: 1 }).toArray()));
+      await seedRegions();
+      return NextResponse.json(await asList(await d.collection("regions").find({}).sort({ name: 1 }).toArray()));
     case "company":
-      return NextResponse.json({ company: await getCompany(user.id) });
+      return NextResponse.json({ company: await getCompany() });
     case "sales":
-      return NextResponse.json(await asList(await d.collection("saleInvoices").find({ userId: user.id }).sort({ createdAt: -1 }).toArray()));
+      return NextResponse.json(await asList(await d.collection("saleInvoices").find({}).sort({ createdAt: -1 }).toArray()));
     case "purchases":
-      return NextResponse.json(await asList(await d.collection("purchaseInvoices").find({ userId: user.id }).sort({ createdAt: -1 }).toArray()));
+      return NextResponse.json(await asList(await d.collection("purchaseInvoices").find({}).sort({ createdAt: -1 }).toArray()));
     case "movements":
-      return NextResponse.json(await asList(await d.collection("movements").find({ userId: user.id }).sort({ createdAt: -1 }).toArray()));
+      return NextResponse.json(await asList(await d.collection("movements").find({}).sort({ createdAt: -1 }).toArray()));
     case "statement":
       if (!id || !["customer", "supplier"].includes(kind || ""))
         return NextResponse.json({ error: "معطيات ناقصة" }, { status: 400 });
-      return NextResponse.json(await partyStatement(user.id, kind as any, id));
+      return NextResponse.json(await partyStatement(kind as any, id));
     default:
       return NextResponse.json({ error: "غير معروف" }, { status: 404 });
   }
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ res
   try {
     if (resource === "items") {
       if (p.action === "adjust") {
-        const item = await d.collection("items").findOne({ _id: new ObjectId(p.id), userId: user.id });
+        const item = await d.collection("items").findOne({ _id: new ObjectId(p.id) });
         if (!item) return NextResponse.json({ error: "الصنف غير موجود" }, { status: 404 });
         const delta = parseFloat(p.delta ?? 0);
         const newQty = (item.qty || 0) + delta;
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ res
       }
       if (!p.name) return NextResponse.json({ error: "اسم الصنف مطلوب" }, { status: 400 });
       const item = await d.collection("items").insertOne({
-        userId: user.id, name: p.name.trim(), category: p.category || "أخرى", unit: p.unit || "قطعة",
+        name: p.name.trim(), category: p.category || "أخرى", unit: p.unit || "قطعة",
         qty: parseFloat(p.qty ?? 0), costPrice: parseFloat(p.costPrice ?? 0),
         salePrice: parseFloat(p.salePrice ?? 0), reorderLevel: parseFloat(p.reorderLevel ?? 0),
         createdAt: new Date(),
@@ -115,34 +115,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ res
     if (resource === "customers" || resource === "suppliers") {
       if (!p.name) return NextResponse.json({ error: "الاسم مطلوب" }, { status: 400 });
       const c = await d.collection(resource).insertOne({
-        userId: user.id, name: p.name.trim(), phone: p.phone || "", region: p.region || "",
+        name: p.name.trim(), phone: p.phone || "", region: p.region || "",
         taxId: p.taxId || "", address: p.address || "", creditBalance: 0, createdAt: new Date(),
       });
       return NextResponse.json({ id: String(c.insertedId) }, { status: 201 });
     }
     if (resource === "regions") {
       if (!p.name) return NextResponse.json({ error: "اسم المنطقة مطلوب" }, { status: 400 });
-      const r = await d.collection("regions").insertOne({ userId: user.id, name: p.name.trim(), createdAt: new Date() });
+      const r = await d.collection("regions").insertOne({ name: p.name.trim(), createdAt: new Date() });
       return NextResponse.json({ id: String(r.insertedId) }, { status: 201 });
     }
     if (resource === "company") {
-      await saveCompany(user.id, p);
+      await saveCompany(p);
       return NextResponse.json({ ok: true });
     }
     if (resource === "sales") {
-      return NextResponse.json(await createSale(user.id, p));
+      return NextResponse.json(await createSale(p));
     }
     if (resource === "purchases") {
-      return NextResponse.json(await createPurchase(user.id, p));
+      return NextResponse.json(await createPurchase(p));
     }
     if (resource === "payments") {
-      if (p.kind === "collect") await collect(user.id, p);
-      else if (p.kind === "settle") await settle(user.id, p);
+      if (p.kind === "collect") await collect(p);
+      else if (p.kind === "settle") await settle(p);
       else return NextResponse.json({ error: "غير معروف" }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
     if (resource === "movements") {
-      await manualMove(user.id, p);
+      await manualMove(p);
       return NextResponse.json({ ok: true });
     }
   } catch (e: any) {
@@ -170,7 +170,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ reso
   for (const k of ["name", "phone", "region", "taxId", "address", "category", "unit", "costPrice", "salePrice", "reorderLevel"]) {
     if (doc[k] !== undefined) allowed[k] = doc[k];
   }
-  const res = await d.collection(resource).updateOne({ _id: new ObjectId(id), userId: user.id }, { $set: allowed });
+  const res = await d.collection(resource).updateOne({ _id: new ObjectId(id) }, { $set: allowed });
   if (res.matchedCount === 0) return NextResponse.json({ error: "غير موجود" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
@@ -185,28 +185,28 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ r
   if (!(await allows(user, RES_PAGE[resource])))
     return NextResponse.json({ error: "غير مخوّل لهذه الصفحة" }, { status: 403 });
 
-  if (resource === "sales") { await deleteSale(user.id, id); return NextResponse.json({ ok: true }); }
-  if (resource === "purchases") { await deletePurchase(user.id, id); return NextResponse.json({ ok: true }); }
+  if (resource === "sales") { await deleteSale(id); return NextResponse.json({ ok: true }); }
+  if (resource === "purchases") { await deletePurchase(id); return NextResponse.json({ ok: true }); }
 
   if (resource === "items") {
-    const inSale = await d.collection("saleInvoices").findOne({ userId: user.id, "rows.itemId": new ObjectId(id) });
-    const inBuy = await d.collection("purchaseInvoices").findOne({ userId: user.id, "rows.itemId": new ObjectId(id) });
+    const inSale = await d.collection("saleInvoices").findOne({ "rows.itemId": new ObjectId(id) });
+    const inBuy = await d.collection("purchaseInvoices").findOne({ "rows.itemId": new ObjectId(id) });
     if (inSale || inBuy) return NextResponse.json({ error: "لا يمكن حذف صنف مرتبط بفواتير سابقة" }, { status: 400 });
   } else if (resource === "customers") {
-    if (await guard(d.collection("saleInvoices"), { userId: user.id, customerId: new ObjectId(id) }))
+    if (await guard(d.collection("saleInvoices"), { customerId: new ObjectId(id) }))
       return NextResponse.json({ error: "لا يمكن حذف عميل مرتبط بفواتير بيع" }, { status: 400 });
   } else if (resource === "suppliers") {
-    if (await guard(d.collection("purchaseInvoices"), { userId: user.id, supplierId: new ObjectId(id) }))
+    if (await guard(d.collection("purchaseInvoices"), { supplierId: new ObjectId(id) }))
       return NextResponse.json({ error: "لا يمكن حذف مورد مرتبط بفواتير شراء" }, { status: 400 });
   } else if (resource === "regions") {
     const region = await d.collection("regions").findOne({ _id: new ObjectId(id) });
-    if (region && await guard(d.collection("customers"), { userId: user.id, region: region.name }))
+    if (region && await guard(d.collection("customers"), { region: region.name }))
       return NextResponse.json({ error: "لا يمكن حذف منطقة مرتبطة بعملاء" }, { status: 400 });
   } else {
     return NextResponse.json({ error: "غير معروف" }, { status: 404 });
   }
 
-  const res = await d.collection(resource).deleteOne({ _id: new ObjectId(id), userId: user.id });
+  const res = await d.collection(resource).deleteOne({ _id: new ObjectId(id) });
   if (res.deletedCount === 0) return NextResponse.json({ error: "غير موجود" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
