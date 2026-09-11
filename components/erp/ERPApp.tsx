@@ -88,10 +88,47 @@ export function ERPApp() {
   const [dashFrom, setDashFrom] = useState("");
   const [dashTo, setDashTo] = useState("");
   const [navOpen, setNavOpen] = useState(true);
+  const [mobileNav, setMobileNav] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [loadErr, setLoadErr] = useState(false);
   const [role, setRole] = useState<string>("sales");
   const [pages, setPages] = useState<string[]>([]);
   const [adminTab, setAdminTab] = useState<"users" | "roles">("users");
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const update = () => {
+      setIsMobile(mq.matches);
+      if (!mq.matches) setMobileNav(false);
+    };
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    let sx = -1, sy = -1;
+    const onStart = (e: TouchEvent) => {
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (sx < 0) return;
+      const dx = e.changedTouches[0].clientX - sx;
+      const dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 70) {
+        if (isMobile && !mobileNav && dx < 0 && sx >= window.innerWidth - 24) setMobileNav(true);
+        else if (isMobile && mobileNav && dx > 0) setMobileNav(false);
+      }
+      sx = -1; sy = -1;
+    };
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchend", onEnd);
+    };
+  }, [isMobile, mobileNav]);
 
   type DB = {
     regions: { id: string; name: string }[];
@@ -726,6 +763,35 @@ if (res.ok) {
     </div>
   );
 
+  const navItems = [
+    ...nav.filter((n) => navKeys.includes(n.key)),
+    ...(navKeys.includes("users") ? [USERS_NAV] : []),
+  ];
+  const navBtn = (n: { key: string; label: string; icon: string }) => {
+    const active = tab === n.key;
+    return (
+      <button
+        key={n.key}
+        onClick={() => { setTab(n.key); setMobileNav(false); }}
+        className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-base font-medium whitespace-nowrap transition-colors"
+        style={
+          active
+            ? { backgroundColor: an, color: Ib, fontWeight: 700 }
+            : { color: "#fff" }
+        }
+        onMouseEnter={(e) => {
+          if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,255,255,0.12)";
+        }}
+        onMouseLeave={(e) => {
+          if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "";
+        }}
+      >
+        <Icon name={n.icon} size={20} />
+        {n.label}
+      </button>
+    );
+  };
+
   if (loading) {
     return (
       <div
@@ -758,6 +824,20 @@ if (res.ok) {
 
       <header style={{ flexShrink: 0, backgroundColor: tt }}>
         <div className="flex items-center gap-3 px-4 py-3">
+          {isMobile && (
+            <button
+              onClick={() => setMobileNav(true)}
+              className="p-2 rounded-lg shrink-0"
+              style={{ color: "#fff" }}
+              aria-label="القائمة"
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+          )}
           <Logo />
           <div className="min-w-0">
             <div className="font-bold text-base leading-tight truncate" style={{ color: "#fff" }}>
@@ -786,6 +866,7 @@ onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = ii)}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <aside
           style={{
+            display: isMobile ? "none" : "flex",
             width: navOpen ? "auto" : 64,
             flexShrink: 0,
             backgroundColor: Ib,
@@ -814,35 +895,51 @@ onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = ii)}
           </div>
           {navOpen && (
             <div className="px-2 pb-2 space-y-1">
-              {[
-                ...nav.filter((n) => navKeys.includes(n.key)),
-                ...(navKeys.includes("users") ? [USERS_NAV] : []),
-              ].map((n) => {
-                const active = tab === n.key;
-                return (
-                  <button
-                    key={n.key}
-                    onClick={() => setTab(n.key)}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-base font-medium whitespace-nowrap transition-colors"
-                    style={
-                      active
-                        ? { backgroundColor: an, color: Ib, fontWeight: 700 }
-                        : { color: "#fff" }
-                    }
-                    onMouseEnter={(e) => {
-                      if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,255,255,0.12)";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "";
-                    }}
-                  >
-                    <Icon name={n.icon} size={20} />
-                    {n.label}
-                  </button>
-                );
-              })}
+              {navItems.map(navBtn)}
             </div>
           )}
+        </aside>
+
+        {/* Mobile drawer */}
+        <div
+          className="fixed inset-0"
+          style={{
+            display: isMobile && mobileNav ? "block" : "none",
+            zIndex: 55,
+            backgroundColor: "rgba(0,0,0,0.45)",
+          }}
+          onClick={() => setMobileNav(false)}
+        />
+        <aside
+          className="fixed"
+          style={{
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: 290,
+            maxWidth: "85vw",
+            display: isMobile ? "flex" : "none",
+            flexDirection: "column",
+            zIndex: 56,
+            backgroundColor: Ib,
+            transform: mobileNav ? "translateX(0)" : "translateX(100%)",
+            transition: "transform 0.25s ease",
+          }}
+        >
+          <div className="px-3 py-2 flex items-center" style={{ justifyContent: "space-between" }}>
+            <span className="text-sm font-bold" style={{ color: "#fff" }}>القائمة</span>
+            <button
+              onClick={() => setMobileNav(false)}
+              className="p-2 rounded-lg"
+              style={{ color: "rgba(255,255,255,0.85)" }}
+              aria-label="إغلاق القائمة"
+            >
+              <Icon name="x" size={28} />
+            </button>
+          </div>
+          <div className="px-2 pb-2 space-y-1" style={{ overflowY: "auto" }}>
+            {navItems.map(navBtn)}
+          </div>
         </aside>
 
       <main className="px-4 py-5" style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
