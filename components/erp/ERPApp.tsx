@@ -173,7 +173,7 @@ export function ERPApp() {
       try {
         let res = await fetch("/api/me");
         if (res.status === 401) {
-          await fetch("/api/refresh");
+          await fetch("/api/auth/refresh", { method: "POST" });
           res = await fetch("/api/me");
         }
 if (res.ok) {

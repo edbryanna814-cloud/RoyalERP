@@ -1,4 +1,4 @@
-const CACHE_NAME = "royal-quotes-cache-v2";
+const CACHE_NAME = "royal-quotes-cache-v3";
 const PRECACHE = [
   "/",
   "/manifest.json",
@@ -45,6 +45,22 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Next.js chunks: always network-first so stale bundles are never served
+  if (url.pathname.startsWith("/_next/")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
           return response;
         })
         .catch(() => caches.match(request))

@@ -9,7 +9,6 @@ function client() {
     globalForMongo._mongo = new MongoClient(uri, {
       tls: true,
       tlsAllowInvalidCertificates: true,
-      tlsAllowInvalidHostnames: true,
     });
   }
   return globalForMongo._mongo;

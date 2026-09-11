@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Service Worker Registration */}
         <script
           dangerouslySetInnerHTML={{
-            __html: "if ('serviceWorker' in navigator) { window.addEventListener('load', function() { navigator.serviceWorker.register('/sw.js').then(function(registration) { console.log('ServiceWorker registration successful with scope: ', registration.scope); }).catch(function(error) { console.log('ServiceWorker registration failed: ', error); }); }); }"
+            __html: "if ('serviceWorker' in navigator) { if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') { navigator.serviceWorker.getRegistrations().then(function(regs) { regs.forEach(function(r) { r.unregister(); }); }); if (window.caches) { caches.keys().then(function(keys) { keys.forEach(function(k) { caches.delete(k); }); }); } } else { window.addEventListener('load', function() { navigator.serviceWorker.register('/sw.js').then(function(registration) { console.log('ServiceWorker registration successful with scope: ', registration.scope); }).catch(function(error) { console.log('ServiceWorker registration failed: ', error); }); }); } }"
           }}
         />
       </body>
